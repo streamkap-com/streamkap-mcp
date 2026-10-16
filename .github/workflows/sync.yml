@@ -1,0 +1,48 @@
+name: Sync from @streamkap/tools
+
+# SKILL.md is maintained in the @streamkap/tools package; this repo mirrors it.
+# Pull requests opened with GITHUB_TOKEN do not trigger other workflows, so the
+# validation runs here before the pull request is opened.
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Copy SKILL.md and version from the latest release
+        id: sync
+        run: |
+          latest=$(npm view @streamkap/tools version)
+          current=$(jq -r .version plugin.json)
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
+          if [ "$latest" = "$current" ]; then
+            echo "Already at $current"
+            exit 0
+          fi
+          tmp=$(mktemp -d)
+          (cd "$tmp" && npm pack "@streamkap/tools@$latest" --silent && tar xzf ./*.tgz package/SKILL.md)
+          cp "$tmp/package/SKILL.md" skills/streamkap/SKILL.md
+          for f in plugin.json .claude-plugin/plugin.json .cursor-plugin/plugin.json .codex-plugin/plugin.json gemini-extension.json; do
+            jq --arg v "$latest" '.version = $v' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+          done
+      - name: Validate
+        run: npx -y @anthropic-ai/claude-code@2.1.287 plugin validate . --strict
+      - uses: peter-evans/create-pull-request@v7
+        with:
+          branch: sync-streamkap-tools
+          commit-message: Sync with @streamkap/tools ${{ steps.sync.outputs.latest }}
+          title: Sync with @streamkap/tools ${{ steps.sync.outputs.latest }}
+          body: |
+            Copies `SKILL.md` from `@streamkap/tools@${{ steps.sync.outputs.latest }}` and sets every manifest to that version.
+            Merging tags the release, which the Gemini CLI gallery and plugin updates pick up.

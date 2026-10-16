@@ -1,0 +1,26 @@
+name: Release
+
+# Gemini CLI installs and updates from the latest GitHub release, so every
+# version that reaches main gets one.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tag and release the manifest version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(jq -r .version plugin.json)
+          if gh release view "v$version" >/dev/null 2>&1; then
+            echo "v$version already released"
+            exit 0
+          fi
+          gh release create "v$version" --target "$GITHUB_SHA" --title "v$version" --notes "Streamkap MCP plugin manifests and skill, in step with @streamkap/tools $version."

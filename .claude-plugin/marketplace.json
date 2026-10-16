@@ -1,0 +1,15 @@
+{
+  "name": "streamkap-mcp",
+  "description": "Build, monitor, and troubleshoot real-time CDC pipelines with the hosted Streamkap MCP server and the Streamkap agent skill.",
+  "owner": {
+    "name": "Streamkap",
+    "email": "support@streamkap.com"
+  },
+  "plugins": [
+    {
+      "name": "streamkap",
+      "source": "./",
+      "description": "Build, monitor, and troubleshoot real-time CDC pipelines with the hosted Streamkap MCP server and the Streamkap agent skill."
+    }
+  ]
+}

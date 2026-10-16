@@ -1,0 +1,23 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "streamkap",
+  "version": "0.9.0",
+  "description": "Build, monitor, and troubleshoot real-time CDC pipelines with the hosted Streamkap MCP server and the Streamkap agent skill.",
+  "author": {
+    "name": "Streamkap",
+    "email": "support@streamkap.com",
+    "url": "https://streamkap.com"
+  },
+  "homepage": "https://docs.streamkap.com/mcp-server",
+  "repository": "https://github.com/streamkap-com/streamkap-mcp",
+  "license": "MIT",
+  "keywords": [
+    "streamkap",
+    "cdc",
+    "change-data-capture",
+    "kafka",
+    "streaming",
+    "data-pipelines",
+    "mcp"
+  ]
+}

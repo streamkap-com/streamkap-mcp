@@ -1,0 +1,11 @@
+{
+  "name": "streamkap",
+  "version": "0.9.0",
+  "description": "Build, monitor, and troubleshoot real-time CDC pipelines with the hosted Streamkap MCP server and the Streamkap agent skill.",
+  "mcpServers": {
+    "streamkap": {
+      "httpUrl": "https://mcp.streamkap.com/mcp"
+    }
+  },
+  "contextFileName": "GEMINI.md"
+}

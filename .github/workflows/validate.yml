@@ -1,0 +1,42 @@
+name: Validate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Claude Code plugin and marketplace
+        run: npx -y @anthropic-ai/claude-code@2.1.287 plugin validate . --strict
+      - name: Every manifest carries the same version
+        run: |
+          versions=$(for f in plugin.json .claude-plugin/plugin.json .cursor-plugin/plugin.json .codex-plugin/plugin.json gemini-extension.json; do jq -r .version "$f"; done | sort -u)
+          if [ "$(echo "$versions" | wc -l)" -ne 1 ]; then
+            echo "::error::Manifest versions disagree: ${versions//$'\n'/ }"
+            exit 1
+          fi
+      - name: Agent Plugins schemas
+        run: |
+          pip install --quiet jsonschema==4.23.0
+          curl -sfo /tmp/plugin.schema.json https://agent-plugins.org/schemas/1.0.0/plugin.schema.json
+          curl -sfo /tmp/mcp.schema.json https://agent-plugins.org/schemas/1.0.0/mcp.schema.json
+          python3 - <<'PY'
+          import json, sys, jsonschema
+          failed = False
+          for schema, doc in [("/tmp/plugin.schema.json", "plugin.json"), ("/tmp/mcp.schema.json", "mcp.json")]:
+              s = json.load(open(schema))
+              for e in jsonschema.validators.validator_for(s)(s).iter_errors(json.load(open(doc))):
+                  print(f"::error file={doc}::{e.message}")
+                  failed = True
+          sys.exit(failed)
+          PY

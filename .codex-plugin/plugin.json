@@ -1,0 +1,46 @@
+{
+  "name": "streamkap",
+  "version": "0.9.0",
+  "description": "Build, monitor, and troubleshoot real-time CDC pipelines with the hosted Streamkap MCP server and the Streamkap agent skill.",
+  "author": {
+    "name": "Streamkap",
+    "email": "support@streamkap.com",
+    "url": "https://streamkap.com"
+  },
+  "homepage": "https://docs.streamkap.com/mcp-server",
+  "repository": "https://github.com/streamkap-com/streamkap-mcp",
+  "license": "MIT",
+  "keywords": [
+    "streamkap",
+    "cdc",
+    "change-data-capture",
+    "kafka",
+    "streaming",
+    "data-pipelines",
+    "mcp"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Streamkap",
+    "shortDescription": "Real-time CDC pipelines",
+    "longDescription": "Streamkap is the developer platform for real-time data. It uses change data capture (CDC) to stream changes from your databases to apps, warehouses, and AI agents the moment they happen. Check pipeline health, build pipelines from PostgreSQL, MySQL, MongoDB, and more into Snowflake, Databricks, BigQuery, ClickHouse, and more, diagnose lag, and triage dead-letter queues in natural language.",
+    "developerName": "Streamkap",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "websiteURL": "https://streamkap.com",
+    "supportURL": "https://streamkap.com/contact-us",
+    "privacyPolicyURL": "https://streamkap.com/privacy",
+    "termsOfServiceURL": "https://streamkap.com/terms",
+    "composerIcon": "./logo.svg",
+    "logo": "./logo.svg",
+    "defaultPrompt": [
+      "Which of my Streamkap pipelines are failing, and what are their latest errors?",
+      "End-to-end lag on my busiest pipeline jumped this morning. What changed?",
+      "Find every dead-letter queue with messages in the last hour and suggest fixes."
+    ]
+  }
+}
