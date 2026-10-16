@@ -28,8 +28,10 @@ jobs:
           echo "latest=$latest" >> "$GITHUB_OUTPUT"
           if [ "$latest" = "$current" ]; then
             echo "Already at $current"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+          echo "changed=true" >> "$GITHUB_OUTPUT"
           tmp=$(mktemp -d)
           (cd "$tmp" && npm pack "@streamkap/tools@$latest" --silent && tar xzf ./*.tgz package/SKILL.md)
           cp "$tmp/package/SKILL.md" skills/streamkap/SKILL.md
@@ -37,8 +39,10 @@ jobs:
             jq --arg v "$latest" '.version = $v' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
           done
       - name: Validate
+        if: steps.sync.outputs.changed == 'true'
         run: npx -y @anthropic-ai/claude-code@2.1.287 plugin validate . --strict
       - uses: peter-evans/create-pull-request@v7
+        if: steps.sync.outputs.changed == 'true'
         with:
           branch: sync-streamkap-tools
           commit-message: Sync with @streamkap/tools ${{ steps.sync.outputs.latest }}
