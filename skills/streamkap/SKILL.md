@@ -1,6 +1,6 @@
 ---
 name: streamkap
-description: Manage Streamkap CDC pipelines, sources, destinations, transforms, topics, and infrastructure via CLI or MCP. Use when the user needs to create, monitor, troubleshoot, or manage data streaming pipelines and connectors.
+description: Manage Streamkap CDC pipelines, API sources, destinations, transforms, topics, and infrastructure via CLI or MCP. Use when the user needs to create, monitor, troubleshoot, or manage data streaming pipelines and connectors.
 ---
 
 # Streamkap CLI & MCP
@@ -51,15 +51,15 @@ To get all results, increase `--page-size` (up to 100), or iterate pages using `
 - CRUD pipelines, sources, destinations, transforms, tags
 - **Brief tools**: `streamkap_list_sources_brief`, `streamkap_list_destinations_brief`, `streamkap_list_pipelines_brief`, `streamkap_list_transforms_brief` — fast overview with minimal data, ideal for initial discovery
 - Monitor: metrics, logs, organisation statistics, consumer groups
-- Lifecycle: deploy, pause, resume, restart, stop sources and destinations
-- Snapshots: execute, stop, cancel (initial and incremental)
+- Lifecycle: deploy CDC sources; pause, resume, restart, stop, reset sources and destinations (reset re-reads an API source's history); `sources retry-api` recovers a Broken API source
+- Snapshots (CDC sources only): execute, stop, cancel (initial and incremental)
 - Schema registry: list subjects, get schemas by version/ID
 - Auth: manage access tokens, client credentials, API keys
 - Alerts: manage subscribers, preferences, credentials
 - Usage: usage metrics, usage summary, usage export
 - Cluster Scaling: check scaling status, scale clusters, monitor/cancel operations
 - Kafka: manage kafka users, list topics, read topic messages, produce messages with optional Schema Registry encoding (Avro/JSON/Protobuf), consume messages with optional Schema Registry decoding (optional — requires KAFKA_BOOTSTRAP_SERVERS)
-- Bulk operations: bulk-stop, bulk-resume, bulk-reset, bulk-delete, bulk-snapshot
+- Bulk operations: bulk-stop, bulk-resume, bulk-reset, bulk-delete, bulk-snapshot (CDC only); bulk pipeline delete skips an API source's managed pipelines
 - **Workflow prompts**: troubleshoot-pipeline, setup-pipeline, infrastructure-overview, diagnose-dlq-errors, report-pipeline-health, deploy-monitoring-agent, triage-agent-error
 
 ## Tool Profiles
@@ -96,9 +96,9 @@ is not a terminal (agent/script/CI), they execute without confirmation.
 Use `--dry-run` to preview first:
 - `delete`, `bulk-delete` — permanently remove resources
 - `pause`, `stop` — halt data flow
-- `reset` — clear consumer group offsets (data loss risk)
+- `reset` — clear consumer group offsets (data loss risk); on an API source it re-reads its history
 - `execute-snapshot`, `execute-incremental-snapshot` — trigger re-sync
-- `deploy` — activates pending resources
+- `deploy` — activates pending CDC resources; API sources reconcile automatically
 
 ## Resource Groups
 pipelines | sources | destinations | transforms | topics | tags |
@@ -110,11 +110,26 @@ auth (login/logout/status/token/encode-key) | doctor | completions | version | a
 
 ## Common Workflows
 
+### API sources
+
+HubSpot, Salesforce, NetSuite, Stripe, Zendesk, Google Analytics 4, Facebook Ads and Google Ads use the generic source commands.
+
+- Config comes from `sources get-source-connector-schema <code>`: fields, `auth_mode` choices, `capabilities` and `oauth`. Everything goes in `config`, including `resources` (required, at least one) and the optional `backfill_start`.
+- Every vendor except Zendesk works with credentials the customer creates; Zendesk signs in only through Connect.
+- `available: false` with `unavailable_reason` means no new source of that connector here; create answers 403.
+- `sources validate-source-connection <code>` tests credentials and resources without saving (pass `source_id` on an edit). A refused credential or setting names its config field in `field`; each resource carries `needs` and `fix` when a permission is missing.
+- `sources update`: resend the mask or omit a secret to keep it, `null` clears an optional one. A new Zendesk `subdomain` needs a new grant; a new Salesforce `domain` or NetSuite `account_id` needs the credentials sent again.
+- Connect: `sources start-source-oauth-connect <code>` (`client_id`/`client_secret` via `--body` where the schema lists `oauth.client_fields`), open `authorize_url`, then `sources poll-source-oauth-grant <code> --state <state>`. Put the one-time `oauth_grant_id` in `config` within 10 minutes and keep it out of logs.
+- API sources reconcile by themselves; `sources deploy` and snapshots are CDC only. `sources get-api-source-resources-status <source-id>` shows backfill progress per resource; `sources retry-api <source-id>` recovers a Broken one (400 for a CDC source, 409 if it is not Broken).
+- Discovery on an existing source: `sources list-source-available-objects <source-id>` (custom objects to add to `resources`) and `sources list-source-available-properties <source-id>` (properties to narrow to). `sources list-source-available-accounts <code>` lists the accounts new credentials reach.
+- Route topics with `topics attach-topic-destination <topic-id> <destination-id>`, or several of one source at once with `destinations attach-topics-to <destination-id> --topic-ids <id>,<id>`; `topics list-topic-destinations <topic-id>` shows where a topic goes. Topic delivery is for API sources only.
+- An API source has no pipeline of its own: delivery keeps one managed pipeline per source and destination (`managed: true`, its `binding_id`). `pipelines update`/`delete` answer 409 on it and `pipelines create` from an API source answers 400; change delivery through the topic-destination commands.
+
 ### Workflow tools (MCP only — prefer these over hand-assembling primitives)
 
 - `streamkap_health_overview` — tenant-wide health in one call: broken
-  connectors by name, DLQ topics holding messages, stale sources, lag and
-  latency, plus per-status counts. Start here.
+  connectors by name, throttled sources by name, DLQ topics holding
+  messages, stale sources, lag and latency, plus per-status counts. Start here.
 - `streamkap_diagnose_pipeline(pipeline_id)` — one pipeline in one call: source
   and destination status, the failed task's Kafka Connect trace, throughput
   metrics, recent ERROR logs, and rule-based findings. Replaces six to eight
@@ -124,6 +139,12 @@ auth (login/logout/status/token/encode-key) | doctor | completions | version | a
 - `streamkap_get_docs_page(route)` — reads that page in full, as Markdown.
   `streamkap_list_docs_pages` and `streamkap_get_docs_navigation` enumerate the
   docs when a search is too narrow.
+
+`Throttled` is an API source (and its managed delivery pipelines) waiting out its vendor
+rate budget. It is neither healthy nor broken, and it resumes by itself at the
+`resume_at` in its task status (`suspend_reason: rate_budget`). Do not resume,
+restart or retry it: that clears the wait and spends the vendor quota again.
+`Throttled` is also a valid `status` filter on source and pipeline list/search.
 
 ### Check infrastructure health (start here)
 streamkap dashboard stats --json
