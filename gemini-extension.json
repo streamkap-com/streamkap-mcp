@@ -1,6 +1,6 @@
 {
   "name": "streamkap",
-  "version": "0.9.1",
+  "version": "0.10.0",
   "description": "Build, monitor, and troubleshoot real-time CDC pipelines with the hosted Streamkap MCP server and the Streamkap agent skill.",
   "mcpServers": {
     "streamkap": {
