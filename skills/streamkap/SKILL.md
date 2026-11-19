@@ -11,8 +11,8 @@ description: Manage Streamkap CDC pipelines, API sources, destinations, transfor
 **MCP:** `npx -y @streamkap/tools` (stdio) or remote HTTP at `mcp.streamkap.com/mcp`
 
 **Auth — pick one:**
-- `STREAMKAP_CLIENT_ID` + `STREAMKAP_CLIENT_SECRET` (Settings > API Keys). REST tools only.
-- `STREAMKAP_PROJECT_KEY` (Settings > Project Keys, then `streamkap auth encode-key <file>`). Bundles API + Kafka + Schema Registry + tool scoping. HTTP mode: use `X-Streamkap-Project-Key` header. Individual vars win on conflict. See https://docs.streamkap.com/project-keys.
+- `STREAMKAP_CLIENT_ID` + `STREAMKAP_CLIENT_SECRET` (Settings > API Keys).
+- `STREAMKAP_PROJECT_KEY` (Settings > Project Keys, then `streamkap auth encode-key <file>`). Supplies API credentials and tool scoping. Older combined keys remain valid. HTTP mode: use `X-Streamkap-Project-Key` header. Individual API vars win on conflict. See https://docs.streamkap.com/project-keys.
 
 ## Command Pattern
 streamkap <resource> <action> [id] [--flags] --json
@@ -27,13 +27,13 @@ MCP tools accept `response_format` parameter:
 Use `response_format: "text"` for overview/diagnostic tasks. Use `"json"` when you need to extract specific fields.
 
 ## CLI Output Formats
-- `--json` or `--format json`: Machine-readable JSON (default when piped)
-- `--format text`: Human-readable summary (default in terminal)
-- `--format auto`: JSON when piped, text when TTY (the default)
+- `--json`, `-fj` or `--format json`: Force machine-readable JSON
+- `--format text` / `-ft`: Human-readable text; lists render as tables
+- `--format auto` (the default): text on a terminal and JSON when piped. `STREAMKAP_FORMAT` (`json` or `text`) overrides auto.
 
 CLI JSON output is never truncated; CLI text output truncates at 480,000 characters. The MCP server caps tool responses at the same ~480K limit and emits a structured `truncated` envelope when a response would exceed it (see `## Pagination` below).
 
-Other global flags: `--body <file>` (or `--body -` for stdin) supplies the request body as JSON for create/update/bulk commands — explicit flags override its fields. `--dry-run` previews a destructive command without executing it. `--verbose` logs method/path/status/timing to stderr.
+Other global flags: `--body <file>` (or `--body -` for stdin) supplies the request body as JSON for create/update/bulk commands — explicit flags override its fields. `--dry-run` previews a supported command. Commands without a preview return a usage error before making changes. `--verbose` logs method/path/status/timing to stderr.
 
 ## Pagination
 All list endpoints use **1-indexed pages** with defaults: `page=1`, `page_size=10` (max 100).
@@ -58,7 +58,7 @@ To get all results, increase `--page-size` (up to 100), or iterate pages using `
 - Alerts: manage subscribers, preferences, credentials
 - Usage: usage metrics, usage summary, usage export
 - Cluster Scaling: check scaling status, scale clusters, monitor/cancel operations
-- Kafka: manage kafka users, list topics, read topic messages, produce messages with optional Schema Registry encoding (Avro/JSON/Protobuf), consume messages with optional Schema Registry decoding (optional — requires KAFKA_BOOTSTRAP_SERVERS)
+- Kafka resources: manage Kafka users, list topics, read topic messages through the Streamkap API, and browse Schema Registry metadata
 - Bulk operations: bulk-stop, bulk-resume, bulk-reset, bulk-delete, bulk-snapshot (CDC only); bulk pipeline delete skips an API source's managed pipelines
 - **Workflow prompts**: troubleshoot-pipeline, setup-pipeline, infrastructure-overview, diagnose-dlq-errors, report-pipeline-health, deploy-monitoring-agent, triage-agent-error
 
@@ -67,10 +67,10 @@ Tool profiles restrict which tools are available. Set via `MCP_TOOL_PROFILE` env
 - `full` (default): all tools
 - `read-only`: GET/search tools only — safe for monitoring agents
 - `agent-operator`: read + idempotent writes (pause, resume, restart); no create or delete
-- `infra-admin`: everything except direct Kafka data tools
-- `directory-default`: reads + plain & idempotent writes + Kafka data tools; blocks destructive resets and deletes
+- `infra-admin`: all remaining tools, equivalent to `full`
+- `directory-default`: reads + plain & idempotent writes; blocks destructive resets and deletes
 
-Toolsets narrow the catalog by feature group before profile and allow/block rules. Set `MCP_TOOLSETS=sources,topics`, send `X-Streamkap-Toolsets` in HTTP mode, or add `?toolsets=` to the MCP URL. Restrictions from env, header, URL, and the server-verified Project Key are intersected; unknown names and disjoint intersections fail closed. Available groups: `pipelines`, `sources`, `destinations`, `topics`, `transforms`, `observability`, `tags`, `schema-registry`, `consumer-groups`, `admin`, `kafka-access`, `alerts`, `usage`, `cluster`, `tenant`, `kafka`, `meta`, `workflows` (`diagnose_pipeline`, `health_overview`), `docs` (`search_docs`, `get_docs_page`, `list_docs_pages`, `get_docs_navigation`).
+Toolsets narrow the catalog by feature group before profile and allow/block rules. Set `MCP_TOOLSETS=sources,topics`, send `X-Streamkap-Toolsets` in HTTP mode, or add `?toolsets=` to the MCP URL. Restrictions from env, header, URL, and the server-verified Project Key are intersected; unknown names and disjoint intersections fail closed. Available groups: `pipelines`, `sources`, `destinations`, `topics`, `transforms`, `observability`, `tags`, `schema-registry`, `consumer-groups`, `admin`, `kafka-access`, `alerts`, `usage`, `cluster`, `tenant`, `meta`, `workflows` (`diagnose_pipeline`, `health_overview`), `docs` (`search_docs`, `get_docs_page`, `list_docs_pages`, `get_docs_navigation`). The legacy `kafka` group remains accepted for old keys but authorizes no tools; mixing it with active groups keeps the active groups available.
 
 OAuth sessions use the compact catalog by default; `MCP_CATALOG=compact` selects it elsewhere. It keeps a curated core plus four meta-tools in `tools/list`; HTTP clients can request the same narrowing with `X-Streamkap-Catalog: compact` or `?catalog=compact`. In compact mode:
 
@@ -83,11 +83,11 @@ The dispatchers validate the target schema and reapply the same profile, toolset
 If toolsets are also configured, include `meta` (for example, `MCP_TOOLSETS=sources,meta`) or the discovery and dispatch tools are intentionally hidden.
 
 ## Limitations
-- Real-time event streaming: MCP stdio is request-response only — no way to keep a Kafka consumer alive between tool calls. For real-time streaming use the remote HTTP server or the CLI `streamkap kafka subscribe` command. `streamkap_consume_messages` works in all modes for one-shot inspection.
+- Topic messages are paged API reads. This package does not produce to Kafka, open direct consumers, or expose a live topic subscription.
 - No undo for destructive operations (deletes are permanent)
 - Rate limits apply — 429 errors include retry-after info
 - All operations are scoped to one tenant (the authenticated API key)
-- MCP tool responses are capped at ~480KB. Oversized responses are replaced with a structured envelope (`{ ..., truncated: { total_records, returned_records, hint } }`) — when you see `truncated.truncated=true`, paginate, lower `page_size`/`max_messages`, use `response_format: "text"`, or call `*_brief` tools
+- MCP tool responses are capped at ~480KB. Oversized responses are replaced with a structured envelope (`{ ..., truncated: { total_records, returned_records, hint } }`) — when you see `truncated.truncated=true`, paginate, lower `page_size`, use `response_format: "text"`, or call `*_brief` tools
 
 ## Destructive Commands (modify or delete data)
 These commands change live infrastructure. When stdin is a terminal (a human is
@@ -106,7 +106,7 @@ dashboard | schema-registry | consumer-groups | admin |
 kafka-access | alerts | usage | cluster-scaling | tenant | other
 
 Helper commands (not API resources):
-auth (login/logout/status/token/encode-key) | doctor | completions | version | api-spec | agent (set/clear/status) | skill (install) | kafka (produce/consume/subscribe with --schema-registry, --decode, --pattern, --group-id)
+auth (login/logout/status/token/encode-key) | doctor | completions | version | api-spec | agent (set/clear/status) | skill (install)
 
 ## Common Workflows
 
@@ -132,8 +132,9 @@ HubSpot, Salesforce, NetSuite, Stripe, Zendesk, Google Analytics 4, Facebook Ads
   messages, stale sources, lag and latency, plus per-status counts. Start here.
 - `streamkap_diagnose_pipeline(pipeline_id)` — one pipeline in one call: source
   and destination status, the failed task's Kafka Connect trace, throughput
-  metrics, recent ERROR logs, and rule-based findings. Replaces six to eight
-  metric and log calls.
+  metrics with the latency's age, recent ERROR and WARN logs grouped into
+  message templates with counts, and rule-based findings. Replaces six to
+  eight metric and log calls.
 - `streamkap_search_docs(query)` — turns a connector error string into the
   documentation page that explains it.
 - `streamkap_get_docs_page(route)` — reads that page in full, as Markdown.
